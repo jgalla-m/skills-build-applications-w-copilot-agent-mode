@@ -25,7 +25,9 @@ SECRET_KEY = 'django-insecure-0h4=w6^n@_eksd$8eg#fzt@at$3s0ui55vr)r&w8+uybxm_$e$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+
+# Allow all hosts
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -76,8 +78,32 @@ WSGI_APPLICATION = 'octofit_tracker.wsgi.application'
 
 
 
+
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
+DATABASES = {
+    'default': {
+        'ENGINE': 'djongo',
+        'NAME': 'octofit_db',
+        'ENFORCE_SCHEMA': False,
+        'CLIENT': {
+            'host': 'localhost',
+            'port': 27017,
+            'username': '',
+            'password': '',
+            'authSource': 'admin',
+            'authMechanism': 'SCRAM-SHA-1',
+        },
+    }
+}
+# Internationalization
+
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = ['*']
+CORS_ALLOW_METHODS = ['*']
+
 DATABASES = {
     'default': {
         'ENGINE': 'djongo',

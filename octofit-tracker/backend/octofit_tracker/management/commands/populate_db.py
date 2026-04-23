@@ -4,19 +4,10 @@ import random
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
+
 from django.db import transaction
 from django.utils import timezone
-
-# Update these imports to match your actual models module.
-# Common patterns:
-#   from octofit_tracker.models import Activity, Workout
-#   from octofit_tracker.models import Activity, WorkoutLog
-try:
-    from octofit_tracker.models import Activity, WorkoutLog  # type: ignore
-except Exception:  # pragma: no cover
-    Activity = None  # type: ignore
-    WorkoutLog = None  # type: ignore
+from octofit_tracker.models import User, Activity, Workout, Team, Leaderboard
 
 
 FIRST_NAMES = ["Avery", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Quinn", "Jamie"]
@@ -43,94 +34,47 @@ def _rand_email(first: str, last: str, n: int) -> str:
 class Command(BaseCommand):
     help = "Populate the database with sample OctoFit Tracker data."
 
-    def add_arguments(self, parser):
-        parser.add_argument("--users", type=int, default=8, help="Number of sample users to create.")
-        parser.add_argument("--logs", type=int, default=40, help="Number of workout logs to create.")
-        parser.add_argument(
-            "--create-superuser",
-            action="store_true",
-            help="Create a demo superuser (admin/admin12345) if it doesn't exist.",
-        )
-
     @transaction.atomic
     def handle(self, *args, **options):
         random.seed(42)
 
-        if Activity is None or WorkoutLog is None:
-            raise RuntimeError(
-                "Could not import Activity/WorkoutLog models. "
-                "Update the imports in populate_db.py to match your project models."
-            )
+        # Clean up old data
+        Leaderboard.objects.all().delete()
+        Activity.objects.all().delete()
+        Workout.objects.all().delete()
+        Team.objects.all().delete()
+        User.objects.all().delete()
 
-        User = get_user_model()
-
-        users_count: int = options["users"]
-        logs_count: int = options["logs"]
-        create_superuser: bool = options["create_superuser"]
-
-        if create_superuser:
-            admin_username = "admin"
-            admin_password = "admin12345"
-            admin_email = "admin@example.com"
-
-            admin, created = User.objects.get_or_create(
-                username=admin_username,
-                defaults={"email": admin_email},
-            )
-            if created or not admin.is_superuser:
-                admin.is_staff = True
-                admin.is_superuser = True
-                admin.set_password(admin_password)
-                admin.save()
-
-            self.stdout.write(self.style.SUCCESS(f"Superuser ready: {admin_username}/{admin_password}"))
-
-        # Create sample users
+        # Create users
         users = []
-        for i in range(1, users_count + 1):
-            first, last = _rand_name()
-            username = f"{first.lower()}{last.lower()}{i}"
-
-            u, _ = User.objects.get_or_create(
-                username=username,
-                defaults={"email": _rand_email(first, last, i)},
-            )
-            # If your User model requires more fields, set them here.
+        for i in range(4):
+            username = ["superman", "batman", "ironman", "spiderman"][i]
+            email = f"{username}@example.com"
+            u = User.objects.create(username=username, email=email)
             users.append(u)
 
+        # Create teams
+        team_dc = Team.objects.create(name="Team DC")
+        team_marvel = Team.objects.create(name="Team Marvel")
+        team_dc.members.add(users[0], users[1])
+        team_marvel.members.add(users[2], users[3])
+
+        # Create workouts
+        workout1 = Workout.objects.create(name="Morning Cardio", description="A quick morning cardio routine.")
+        workout2 = Workout.objects.create(name="Strength Training", description="Full body strength workout.")
+        workout1.suggested_for.add(users[0], users[2])
+        workout2.suggested_for.add(users[1], users[3])
+
         # Create activities
-        activities = []
-        for name, category in ACTIVITIES:
-            # Adjust field names if your Activity model differs.
-            a, _ = Activity.objects.get_or_create(
-                name=name,
-                defaults={"category": category},
-            )
-            activities.append(a)
+        Activity.objects.create(user=users[0], activity_type="Flying", duration=60, calories_burned=500, date=timezone.now().date())
+        Activity.objects.create(user=users[1], activity_type="Martial Arts", duration=45, calories_burned=400, date=timezone.now().date())
+        Activity.objects.create(user=users[2], activity_type="Engineering", duration=90, calories_burned=350, date=timezone.now().date())
+        Activity.objects.create(user=users[3], activity_type="Web Swinging", duration=30, calories_burned=250, date=timezone.now().date())
 
-        # Create workout logs
-        now = timezone.now()
-        created_logs = 0
+        # Create leaderboard
+        Leaderboard.objects.create(user=users[0], total_points=150, rank=1)
+        Leaderboard.objects.create(user=users[1], total_points=120, rank=2)
+        Leaderboard.objects.create(user=users[2], total_points=110, rank=3)
+        Leaderboard.objects.create(user=users[3], total_points=100, rank=4)
 
-        for _ in range(logs_count):
-            user = random.choice(users)
-            activity = random.choice(activities)
-
-            minutes = random.choice([20, 30, 40, 45, 60])
-            calories = minutes * random.randint(6, 12)
-            performed_at = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
-
-            # Adjust field names if your WorkoutLog model differs.
-            WorkoutLog.objects.create(
-                user=user,
-                activity=activity,
-                duration_minutes=minutes,
-                calories_burned=calories,
-                performed_at=performed_at,
-            )
-            created_logs += 1
-
-        self.stdout.write(self.style.SUCCESS(f"Created/ensured {len(users)} users"))
-        self.stdout.write(self.style.SUCCESS(f"Created/ensured {len(activities)} activities"))
-        self.stdout.write(self.style.SUCCESS(f"Created {created_logs} workout logs"))
-        self.stdout.write(self.style.SUCCESS("Database populated successfully."))
+        self.stdout.write(self.style.SUCCESS("Database populated with superhero sample data."))
