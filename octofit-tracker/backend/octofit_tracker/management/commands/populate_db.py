@@ -1,155 +1,136 @@
-"""
-Populate the local database with sample data for the GitHub Skills exercise.
-
-Common usage:
-  python populate_db.py
-
-This script assumes:
-- You have a Flask app factory create_app()
-- SQLAlchemy db object
-- Models such as User, Post, Comment (adjust as needed)
-"""
-
 from __future__ import annotations
 
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-# --- Update these imports to match your repository layout ---
-# Typical layouts:
-#   from app import create_app, db
-#   from app.models import User, Post, Comment
-# or
-#   from src.app import create_app, db
-#   from src.models import User, Post, Comment
+from django.core.management.base import BaseCommand
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
 
-from app import create_app, db  # noqa: E402
-from app.models import User, Post, Comment  # noqa: E402
+# Update these imports to match your actual models module.
+# Common patterns:
+#   from octofit_tracker.models import Activity, Workout
+#   from octofit_tracker.models import Activity, WorkoutLog
+try:
+    from octofit_tracker.models import Activity, WorkoutLog  # type: ignore
+except Exception:  # pragma: no cover
+    Activity = None  # type: ignore
+    WorkoutLog = None  # type: ignore
 
 
-FIRST_NAMES = [
-    "Avery", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Quinn", "Jamie",
-    "Reese", "Skyler", "Rowan", "Parker",
-]
-LAST_NAMES = [
-    "Nguyen", "Patel", "Garcia", "Johnson", "Kim", "Brown", "Martinez", "Lee",
-    "Davis", "Lopez", "Wilson", "Anderson",
-]
-TOPICS = [
-    "Copilot", "Flask", "SQLAlchemy", "APIs", "Testing", "Refactoring",
-    "Python", "GitHub Actions", "Databases", "Prompting",
-]
-SENTENCES = [
-    "Today I learned something new.",
-    "This was easier than I expected.",
-    "Here’s a small tip that saved me time.",
-    "I hit an error, but the fix was straightforward.",
-    "I’m documenting this for future me.",
-    "This is a great place to start experimenting.",
-    "I’m keeping this example intentionally simple.",
+FIRST_NAMES = ["Avery", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Quinn", "Jamie"]
+LAST_NAMES = ["Nguyen", "Patel", "Garcia", "Johnson", "Kim", "Brown", "Martinez", "Lee"]
+
+ACTIVITIES = [
+    ("Run", "Cardio"),
+    ("Walk", "Cardio"),
+    ("Cycling", "Cardio"),
+    ("Rowing", "Cardio"),
+    ("Yoga", "Flexibility"),
+    ("Strength Training", "Strength"),
 ]
 
 
-def random_name() -> tuple[str, str]:
+def _rand_name() -> tuple[str, str]:
     return random.choice(FIRST_NAMES), random.choice(LAST_NAMES)
 
 
-def random_email(first: str, last: str, n: int) -> str:
+def _rand_email(first: str, last: str, n: int) -> str:
     return f"{first.lower()}.{last.lower()}{n}@example.com"
 
 
-def random_title() -> str:
-    return f"{random.choice(TOPICS)}: {random.choice(['notes', 'quickstart', 'walkthrough', 'tips', 'pitfalls'])}"
+class Command(BaseCommand):
+    help = "Populate the database with sample OctoFit Tracker data."
 
-
-def random_body(paragraphs: int = 2) -> str:
-    out = []
-    for _ in range(paragraphs):
-        lines = random.sample(SENTENCES, k=min(3, len(SENTENCES)))
-        out.append(" ".join(lines))
-    return "\n\n".join(out)
-
-
-def reset_db() -> None:
-    """Drop and recreate all tables (dev only)."""
-    db.drop_all()
-    db.create_all()
-
-
-def seed_users(count: int = 8) -> list[User]:
-    users: list[User] = []
-    for i in range(1, count + 1):
-        first, last = random_name()
-        u = User(
-            name=f"{first} {last}",
-            email=random_email(first, last, i),
+    def add_arguments(self, parser):
+        parser.add_argument("--users", type=int, default=8, help="Number of sample users to create.")
+        parser.add_argument("--logs", type=int, default=40, help="Number of workout logs to create.")
+        parser.add_argument(
+            "--create-superuser",
+            action="store_true",
+            help="Create a demo superuser (admin/admin12345) if it doesn't exist.",
         )
-        users.append(u)
-        db.session.add(u)
-    db.session.commit()
-    return users
 
+    @transaction.atomic
+    def handle(self, *args, **options):
+        random.seed(42)
 
-def seed_posts(users: list[User], posts_per_user: int = 3) -> list[Post]:
-    posts: list[Post] = []
-    now = datetime.utcnow()
-
-    for u in users:
-        for idx in range(posts_per_user):
-            created_at = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
-            p = Post(
-                title=random_title(),
-                body=random_body(paragraphs=random.randint(1, 3)),
-                user_id=u.id,
-                created_at=created_at,
+        if Activity is None or WorkoutLog is None:
+            raise RuntimeError(
+                "Could not import Activity/WorkoutLog models. "
+                "Update the imports in populate_db.py to match your project models."
             )
-            posts.append(p)
-            db.session.add(p)
 
-    db.session.commit()
-    return posts
+        User = get_user_model()
 
+        users_count: int = options["users"]
+        logs_count: int = options["logs"]
+        create_superuser: bool = options["create_superuser"]
 
-def seed_comments(users: list[User], posts: list[Post], count: int = 20) -> list[Comment]:
-    comments: list[Comment] = []
-    now = datetime.utcnow()
+        if create_superuser:
+            admin_username = "admin"
+            admin_password = "admin12345"
+            admin_email = "admin@example.com"
 
-    for _ in range(count):
-        u = random.choice(users)
-        p = random.choice(posts)
-        created_at = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
-        c = Comment(
-            body=random_body(paragraphs=1),
-            user_id=u.id,
-            post_id=p.id,
-            created_at=created_at,
-        )
-        comments.append(c)
-        db.session.add(c)
+            admin, created = User.objects.get_or_create(
+                username=admin_username,
+                defaults={"email": admin_email},
+            )
+            if created or not admin.is_superuser:
+                admin.is_staff = True
+                admin.is_superuser = True
+                admin.set_password(admin_password)
+                admin.save()
 
-    db.session.commit()
-    return comments
+            self.stdout.write(self.style.SUCCESS(f"Superuser ready: {admin_username}/{admin_password}"))
 
+        # Create sample users
+        users = []
+        for i in range(1, users_count + 1):
+            first, last = _rand_name()
+            username = f"{first.lower()}{last.lower()}{i}"
 
-def main() -> None:
-    random.seed(42)
+            u, _ = User.objects.get_or_create(
+                username=username,
+                defaults={"email": _rand_email(first, last, i)},
+            )
+            # If your User model requires more fields, set them here.
+            users.append(u)
 
-    app = create_app()
-    with app.app_context():
-        print("Resetting database...")
-        reset_db()
+        # Create activities
+        activities = []
+        for name, category in ACTIVITIES:
+            # Adjust field names if your Activity model differs.
+            a, _ = Activity.objects.get_or_create(
+                name=name,
+                defaults={"category": category},
+            )
+            activities.append(a)
 
-        print("Seeding users...")
-        users = seed_users(count=8)
+        # Create workout logs
+        now = timezone.now()
+        created_logs = 0
 
-        print("Seeding posts...")
-        posts = seed_posts(users, posts_per_user=3)
+        for _ in range(logs_count):
+            user = random.choice(users)
+            activity = random.choice(activities)
 
-        print("Seeding comments...")
-        seed_comments(users, posts, count=24)
+            minutes = random.choice([20, 30, 40, 45, 60])
+            calories = minutes * random.randint(6, 12)
+            performed_at = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
 
-        print("Done. Database populated successfully.")
+            # Adjust field names if your WorkoutLog model differs.
+            WorkoutLog.objects.create(
+                user=user,
+                activity=activity,
+                duration_minutes=minutes,
+                calories_burned=calories,
+                performed_at=performed_at,
+            )
+            created_logs += 1
 
-
-if __name__ == "__main__":
-    main()
+        self.stdout.write(self.style.SUCCESS(f"Created/ensured {len(users)} users"))
+        self.stdout.write(self.style.SUCCESS(f"Created/ensured {len(activities)} activities"))
+        self.stdout.write(self.style.SUCCESS(f"Created {created_logs} workout logs"))
+        self.stdout.write(self.style.SUCCESS("Database populated successfully."))
