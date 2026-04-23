@@ -1,6 +1,8 @@
 from django.db import models
 
 # User model (extend as needed)
+
+
 class User(models.Model):
     username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(unique=True)

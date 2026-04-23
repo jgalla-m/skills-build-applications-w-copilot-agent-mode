@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'octofit_tracker',
     'rest_framework',
-    'djongo',
     'corsheaders',
 ]
 
@@ -76,6 +75,7 @@ WSGI_APPLICATION = 'octofit_tracker.wsgi.application'
 
 
 
+
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 DATABASES = {
@@ -86,7 +86,11 @@ DATABASES = {
         'CLIENT': {
             'host': 'localhost',
             'port': 27017,
-        }
+            # 'username': '',
+            # 'password': '',
+            # 'authSource': 'admin',
+            # 'authMechanism': 'SCRAM-SHA-1',
+        },
     }
 }
 
@@ -100,6 +104,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.BasicAuthentication',
     ],
 }
+
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
@@ -152,8 +157,3 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Allow all hosts
 ALLOWED_HOSTS = ['*']
 
-# CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = ['*']
-CORS_ALLOW_METHODS = ['*']
