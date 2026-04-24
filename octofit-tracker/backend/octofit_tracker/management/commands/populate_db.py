@@ -1,80 +1,74 @@
-from __future__ import annotations
-
-import random
-from datetime import timedelta
-
 from django.core.management.base import BaseCommand
-
-from django.db import transaction
+from octofit_tracker.models import User, Team, Activity, Workout, Leaderboard
 from django.utils import timezone
-from octofit_tracker.models import User, Activity, Workout, Team, Leaderboard
-
-
-FIRST_NAMES = ["Avery", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Quinn", "Jamie"]
-LAST_NAMES = ["Nguyen", "Patel", "Garcia", "Johnson", "Kim", "Brown", "Martinez", "Lee"]
-
-ACTIVITIES = [
-    ("Run", "Cardio"),
-    ("Walk", "Cardio"),
-    ("Cycling", "Cardio"),
-    ("Rowing", "Cardio"),
-    ("Yoga", "Flexibility"),
-    ("Strength Training", "Strength"),
-]
-
-
-def _rand_name() -> tuple[str, str]:
-    return random.choice(FIRST_NAMES), random.choice(LAST_NAMES)
-
-
-def _rand_email(first: str, last: str, n: int) -> str:
-    return f"{first.lower()}.{last.lower()}{n}@example.com"
+import random
 
 
 class Command(BaseCommand):
-    help = "Populate the database with sample OctoFit Tracker data."
+    help = "Populate the database with sample data."
 
-    @transaction.atomic
-    def handle(self, *args, **options):
-        random.seed(42)
+    def handle(self, *args, **kwargs):
+        self.stdout.write("Creating sample data...")
 
-        # Clean up old data
+        # Clear existing data
         Leaderboard.objects.all().delete()
-        Activity.objects.all().delete()
         Workout.objects.all().delete()
+        Activity.objects.all().delete()
         Team.objects.all().delete()
         User.objects.all().delete()
 
-        # Create users
+        # Create Users
         users = []
-        for i in range(4):
-            username = ["superman", "batman", "ironman", "spiderman"][i]
-            email = f"{username}@example.com"
-            u = User.objects.create(username=username, email=email)
-            users.append(u)
+        for i in range(1, 6):
+            user = User.objects.create(
+                username=f"user{i}",
+                email=f"user{i}@example.com"
+            )
+            users.append(user)
 
-        # Create teams
-        team_dc = Team.objects.create(name="Team DC")
-        team_marvel = Team.objects.create(name="Team Marvel")
-        team_dc.members.add(users[0], users[1])
-        team_marvel.members.add(users[2], users[3])
+        # Create Teams
+        team1 = Team.objects.create(name="Team Alpha")
+        team2 = Team.objects.create(name="Team Beta")
 
-        # Create workouts
-        workout1 = Workout.objects.create(name="Morning Cardio", description="A quick morning cardio routine.")
-        workout2 = Workout.objects.create(name="Strength Training", description="Full body strength workout.")
-        workout1.suggested_for.add(users[0], users[2])
-        workout2.suggested_for.add(users[1], users[3])
+        # Assign users to teams
+        for user in users[:3]:
+            team1.members.add(user)
 
-        # Create activities
-        Activity.objects.create(user=users[0], activity_type="Flying", duration=60, calories_burned=500, date=timezone.now().date())
-        Activity.objects.create(user=users[1], activity_type="Martial Arts", duration=45, calories_burned=400, date=timezone.now().date())
-        Activity.objects.create(user=users[2], activity_type="Engineering", duration=90, calories_burned=350, date=timezone.now().date())
-        Activity.objects.create(user=users[3], activity_type="Web Swinging", duration=30, calories_burned=250, date=timezone.now().date())
+        for user in users[3:]:
+            team2.members.add(user)
 
-        # Create leaderboard
-        Leaderboard.objects.create(user=users[0], total_points=150, rank=1)
-        Leaderboard.objects.create(user=users[1], total_points=120, rank=2)
-        Leaderboard.objects.create(user=users[2], total_points=110, rank=3)
-        Leaderboard.objects.create(user=users[3], total_points=100, rank=4)
+        # Create Activities
+        activity_types = ["Running", "Cycling", "Swimming", "Yoga"]
 
-        self.stdout.write(self.style.SUCCESS("Database populated with superhero sample data."))
+        activities = []
+        for name in activity_types:
+            activity = Activity.objects.create(name=name)
+            activities.append(activity)
+
+        # Create Workouts
+        workouts = []
+        for user in users:
+            for _ in range(3):
+                activity = random.choice(activities)
+                duration = random.randint(20, 90)
+
+                workout = Workout.objects.create(
+                    user=user,
+                    activity=activity,
+                    duration=duration,
+                    date=timezone.now()
+                )
+                workouts.append(workout)
+
+        # Create Leaderboard (sum durations per user)
+        for user in users:
+            total_score = sum(
+                w.duration for w in workouts if w.user == user
+            )
+
+            Leaderboard.objects.create(
+                user=user,
+                score=total_score
+            )
+
+        self.stdout.write(self.style.SUCCESS("Database populated successfully!"))
